@@ -17,10 +17,10 @@ defmodule Vix.LibvipsPrecompiled do
     :ok
   end
 
-  @release_tag "v1.2.0"
+  @release_tag "v8.18.2-heic"
 
   @filename "sharp-libvips-<%= suffix %>.tar.gz"
-  @url "https://github.com/akash-akya/sharp-libvips/releases/download/<%= tag %>/<%= filename %>"
+  @url "https://github.com/VianetManagement/sharp-libvips/releases/download/<%= tag %>/<%= filename %>"
 
   defp url(target) do
     {:ok, suffix} = cast_target(target)
