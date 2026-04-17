@@ -65,10 +65,10 @@ else
 
 	ifeq ($(UNAME_SYS), Darwin)
 		LDFLAGS += -Wl,-rpath,@loader_path/precompiled_libvips/lib
-		LDLIBS  += -lvips.42
+		LDLIBS  += -lvips-cpp.42
 	else ifeq ($(UNAME_SYS), Linux)
 		LDFLAGS += -Wl,-s -Wl,--disable-new-dtags -Wl,-rpath='$$ORIGIN/precompiled_libvips/lib'
-		LDLIBS  += -l:libvips.so.42
+		LDLIBS  += -l:libvips-cpp.so.42
 	endif
 endif
 
