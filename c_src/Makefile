@@ -221,7 +221,7 @@ $(PREFIX):
 $(OBJ): Makefile $(COMPILE_CONFIG) $(PRECOMPILED_LIBVIPS_PREREQUISITE)
 
 # Dependency generation
-%.d: %.c
+%.d: %.c $(PRECOMPILED_LIBVIPS_PREREQUISITE)
 	$(Q)$(CC) $(CFLAGS) -MM -MT $(@:.d=.o) $< > $@
 
 # Include dependency files only for build goals. Regenerating them needs the
