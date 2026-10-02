@@ -1,7 +1,7 @@
 defmodule Vix.MixProject do
   use Mix.Project
 
-  @version "0.38.0"
+  @version "0.42.0"
   @scm_url "https://github.com/akash-akya/vix"
   @valid_compilation_modes [
     "PRECOMPILED_NIF_AND_LIBVIPS",
@@ -27,10 +27,8 @@ defmodule Vix.MixProject do
       make_precompiler_url: "#{@scm_url}/releases/download/v#{@version}/@{artefact_filename}",
       make_precompiler_priv_paths: [
         "vix.*",
-        "precompiled_libvips/lib/libvips.dylib",
-        "precompiled_libvips/lib/libvips.*.dylib",
-        "precompiled_libvips/lib/libvips.so",
-        "precompiled_libvips/lib/libvips.so.*",
+        "precompiled_libvips/lib/libvips-cpp.*.dylib",
+        "precompiled_libvips/lib/libvips-cpp.so.*",
         "precompiled_libvips/lib/*.dll",
         "precompiled_libvips/lib/*.lib"
       ],
@@ -83,6 +81,7 @@ defmodule Vix.MixProject do
         source_ref: "v#{@version}",
         extras: [
           "README.md",
+          "DEVELOPMENT.md",
           "LICENSE",
           "livebooks/introduction.livemd",
           "livebooks/picture-language.livemd",
@@ -132,7 +131,7 @@ defmodule Vix.MixProject do
       # Keep the Hex package limited to runtime build inputs.
       # Repository-only helpers such as scripts/ are intentionally excluded.
       files:
-        ~w(lib build_scripts checksum.exs mix.exs README.md LICENSE Makefile c_src/Makefile c_src/*.{h,c} c_src/g_object/*.{h,c}),
+        ~w(lib build_scripts checksum.exs mix.exs README.md DEVELOPMENT.md LICENSE Makefile c_src/Makefile c_src/*.{h,c} c_src/g_object/*.{h,c}),
       links: %{
         GitHub: @scm_url,
         libvips: "https://libvips.github.io/libvips"

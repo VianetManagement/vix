@@ -1,347 +1,298 @@
 # Vix Development Guide
 
-This document provides comprehensive guidance for Vix development, testing, and release processes.
+Repo-specific notes for native builds, precompiled libvips, CI, and releases.
 
-## Table of Contents
+## Compilation Modes
 
-- [Development Environment Setup](#development-environment-setup)
-- [Building libvips from Source](#building-libvips-from-source)
-- [Build System](#build-system)
-- [Toolchain Management](#toolchain-management)
-- [Testing and Quality Assurance](#testing-and-quality-assurance)
-- [Release Process](#release-process)
-- [Troubleshooting](#troubleshooting)
+Vix supports three `VIX_COMPILATION_MODE` values:
 
-## Development Environment Setup
+- `PRECOMPILED_NIF_AND_LIBVIPS` is the default. It downloads a precompiled Vix
+  NIF from the Vix GitHub release when one is available. Do not use this as the
+  only check for native C changes, because it can reuse the released NIF instead
+  of compiling local C sources.
+- `PRECOMPILED_LIBVIPS` compiles the local NIF and links it against the
+  sharp-libvips tarball. Use this for changes to native code, precompiled
+  libvips, link flags, or packaged runtime files.
+- `PLATFORM_PROVIDED_LIBVIPS` uses `pkg-config vips` and links against the host
+  libvips. Set `VIX_LIBVIPS_PREFIX` to test a specific local libvips install.
 
-### Prerequisites
-
-- Elixir 1.11+ with OTP 21+
-- C compiler (gcc/clang)
-- Make
-- pkg-config (for system libvips detection)
-
-### Compilation Modes
-
-Vix supports three compilation modes controlled by the `VIX_COMPILATION_MODE` environment variable:
-
-1. **`PRECOMPILED_NIF_AND_LIBVIPS`** (default) - Use precompiled NIFs and libvips
-2. **`PRECOMPILED_LIBVIPS`** - Compile NIFs locally, use precompiled libvips
-3. **`PLATFORM_PROVIDED_LIBVIPS`** - Use a libvips installation resolved via `pkg-config`
+Useful commands:
 
 ```bash
-# Use the system libvips installation (requires libvips-dev package)
-export VIX_COMPILATION_MODE=PLATFORM_PROVIDED_LIBVIPS
+rm -rf _build/*/lib/vix cache/ priv/*
 
-# Use a specific libvips install prefix instead of the system default
-export VIX_COMPILATION_MODE=PLATFORM_PROVIDED_LIBVIPS
-export VIX_LIBVIPS_PREFIX=/path/to/libvips/prefix
-
-# Force precompiled libvips build
-export VIX_COMPILATION_MODE=PRECOMPILED_LIBVIPS
-```
-
-`VIX_LIBVIPS_PREFIX` is the libvips install prefix Vix should use, for example the path passed to Meson with `--prefix`.
-
-## Building libvips from Source
-
-For development against a newer libvips without packaging a custom binary, developers can use `scripts/build_libvips.sh` as a starting point to build libvips.
-
-It builds a `libvips` source archive into a private prefix using the libraries available on the local machine.
-
-The helper script expects `curl`, `tar`, `meson`, `ninja`, `pkg-config`, and a working C/C++ compiler.
-
-```bash
-# Build a tagged release
-./scripts/build_libvips.sh --ref vX.X.X
-export VIX_LIBVIPS_PREFIX="$(pwd)/.libvips/vX.X.X"
-export VIX_COMPILATION_MODE=PLATFORM_PROVIDED_LIBVIPS
-
+ELIXIR_MAKE_CACHE_DIR="$(pwd)/cache" \
+VIX_COMPILATION_MODE=PRECOMPILED_LIBVIPS \
 mix test
 
-# Build the current upstream development branch
-./scripts/build_libvips.sh --ref master
-export VIX_LIBVIPS_PREFIX="$(pwd)/.libvips/master"
-export VIX_COMPILATION_MODE=PLATFORM_PROVIDED_LIBVIPS
-```
+VIX_COMPILATION_MODE=PLATFORM_PROVIDED_LIBVIPS mix test
 
-If `--ref` is omitted, the script builds the latest upstream tagged release.
-
-`VIX_LIBVIPS_PREFIX` must point to the exact libvips install prefix you want Vix to use.
-
-### Initial Setup
-
-```bash
-# Clone and build
-git clone https://github.com/akash-akya/vix.git
-cd vix
-make all
-
-# Run tests
+VIX_LIBVIPS_PREFIX=/path/to/libvips/prefix \
+VIX_COMPILATION_MODE=PLATFORM_PROVIDED_LIBVIPS \
 mix test
 
-# Verify installation
-iex -S mix
+make debug
+make V=1 all
 ```
 
-## Build System
+Generated paths such as `_build/`, `deps/`, `priv/`, `cache/`, `.libvips/`,
+`toolchains/`, and `checksum.exs` should not be committed.
 
-### Core Build Commands
+## Precompiled libvips
 
-```bash
-# Build everything
-make all
-make compile
+Vix downloads precompiled libvips from
+[`akash-akya/sharp-libvips`](https://github.com/akash-akya/sharp-libvips).
 
-# Clean builds
-make clean                          # Clean build artifacts
-make deep_clean                     # Full clean including precompiled libvips
-make clean_precompiled_libvips      # Remove only precompiled libvips
+Current configuration:
 
-# Debug and verbose builds
-make debug                          # Show the native build configuration
-make V=1 all                        # Verbose compilation output
+- sharp-libvips release tag: `v8.18.7-rc1`
+- upstream libvips version: `8.18.7`
+- Vix config: `@release_tag` in `build_scripts/precompiler.exs`
+- asset pattern: `sharp-libvips-<platform>.tar.gz`
+
+Current target mapping:
+
+| Vix target | sharp-libvips asset |
+| --- | --- |
+| `x86_64-linux-gnu` | `sharp-libvips-linux-x64.tar.gz` |
+| `x86_64-linux-musl` | `sharp-libvips-linuxmusl-x64.tar.gz` |
+| `aarch64-linux-gnu` | `sharp-libvips-linux-arm64v8.tar.gz` |
+| `aarch64-linux-musl` | `sharp-libvips-linuxmusl-arm64v8.tar.gz` |
+| `arm-linux-gnueabihf` | `sharp-libvips-linux-armv6.tar.gz` |
+| `armv7l-linux-gnueabihf` | `sharp-libvips-linux-armv6.tar.gz` |
+| `x86_64-apple-darwin` | `sharp-libvips-darwin-x64.tar.gz` |
+| `aarch64-apple-darwin` | `sharp-libvips-darwin-arm64v8.tar.gz` |
+
+For precompiled POSIX builds, Vix links directly to `libvips-cpp`:
+
+```text
+precompiled_libvips/lib/libvips-cpp.so.*
+precompiled_libvips/lib/libvips-cpp.*.dylib
 ```
 
-### Build Configuration
+This is expected. The sharp-libvips package exports the libvips C ABI from
+`libvips-cpp`, so the precompiled POSIX package does not need a separate
+`libvips.so` or `libvips.dylib`.
 
-Build behavior is controlled by several environment variables:
+The files copied into precompiled Vix NIF archives are controlled by
+`make_precompiler_priv_paths` in `mix.exs`.
 
-- `VIX_COMPILATION_MODE` - Compilation strategy
-- `VIX_LIBVIPS_PREFIX` - Custom libvips install prefix for `PLATFORM_PROVIDED_LIBVIPS`
-- `LIBVIPS_VERSION` - Override default precompiled libvips version
-- `CC_PRECOMPILER_CURRENT_TARGET` - Override target platform
-- `ELIXIR_MAKE_CACHE_DIR` - Cache directory for precompiled binaries
+## Local libvips Builds
 
-
-## Toolchain Management
-
-### Musl Toolchain System
-
-Vix uses musl toolchains for cross-compilation. Due to instability of the upstream musl.cc website, we maintain mirrors via GitHub releases.
-
-#### Downloading Toolchains
+Use `scripts/build_libvips.sh` when testing Vix against an upstream libvips ref
+without publishing a sharp-libvips release. The script builds a normal C
+libvips install for `PLATFORM_PROVIDED_LIBVIPS`.
 
 ```bash
-# Download cached toolchains with fallback
+./scripts/build_libvips.sh --ref vX.Y.Z
+
+VIX_LIBVIPS_PREFIX="$(pwd)/.libvips/vX.Y.Z" \
+VIX_COMPILATION_MODE=PLATFORM_PROVIDED_LIBVIPS \
+mix test
+```
+
+If `--ref` is omitted, the script resolves the latest upstream libvips release.
+Use `--overwrite` to replace an existing local prefix.
+
+## Toolchains
+
+`precompile.yaml` uses musl cross-compilers for musl NIF targets. The scripts
+mirror the required musl.cc archives on Vix GitHub releases:
+
+```bash
 ./scripts/download_toolchains.sh
-```
-
-This script:
-1. First attempts to download from our GitHub release mirror
-2. Falls back to upstream musl.cc if mirror fails
-3. Downloads and extracts `x86_64-linux-musl-cross.tgz` and `aarch64-linux-musl-cross.tgz`
-
-#### Mirroring New Toolchains
-
-```bash
-# Mirror toolchains from upstream to local directory
 ./scripts/mirror_toolchains.sh
 ```
 
-This creates a `toolchains/` directory with downloaded toolchain archives. To update the mirror:
+The current mirrored version is `11.2.1`; update `TOOLCHAIN_VERSION` in both
+scripts if the mirror changes.
 
-1. Run the mirror script
-2. Create a GitHub release tagged `toolchains-v{VERSION}` (e.g., `toolchains-v11.2.1`)
-3. Upload the toolchain files as release assets
-4. Update version in scripts if needed
+## CI
 
-### Precompiled libvips Management
+`.github/workflows/ci.yaml` runs on pushes and pull requests to `master` and
+`dev`. It covers:
 
-Precompiled libvips binaries are managed through our [sharp-libvips fork](https://github.com/akash-akya/sharp-libvips).
+- Linux `PLATFORM_PROVIDED_LIBVIPS` against the latest upstream libvips release.
+- Linux `PRECOMPILED_LIBVIPS`.
+- Linux default precompiled NIF mode with `mix elixir_make.checksum --only-local`.
+- ARM precompiled smoke test through Docker/QEMU.
+- macOS default precompiled and `PRECOMPILED_LIBVIPS` through Nix.
+- compile with warnings as errors, unused dependency checks, formatter, Credo,
+  and Dialyzer.
 
-Current configuration:
-- **libvips version**: `8.15.3` (defined in `build_scripts/precompiler.exs:11`)
-- **Release tag**: `8.15.3-rc3` (defined in `build_scripts/precompiler.exs:24`)
-
-Supported platforms:
-- Linux x64 (gnu/musl)
-- Linux ARM64 (gnu/musl)  
-- Linux ARMv7/ARMv6
-- macOS x64/ARM64
-
-## Testing and Quality Assurance
-
-### Running Tests
-
-```bash
-# Standard test suite
-mix test
-
-# Test with cached precompiled binaries
-ELIXIR_MAKE_CACHE_DIR="$(pwd)/cache" mix test
-
-# Test specific files
-mix test test/vix/vips/image_test.exs
-
-# Coverage reports
-mix coveralls
-```
-
-### Code Quality Tools
-
-```bash
-# Static analysis
-make lint          # or mix credo
-make dialyxir      # or mix dialyxir
-
-# Code formatting
-make format        # or mix format
-```
-
-### Pre-commit Checks
-
-Before committing changes, ensure:
-
-```bash
-# Clean build passes
-make clean && make all
-
-# All tests pass
-mix test
-
-# Code quality checks pass
-make lint && make dialyxir
-
-# Code is formatted
-make format
-```
+`.github/workflows/precompile.yaml` runs for `v*` tags and uploads
+`cache/*.tar.gz` NIF artifacts to the matching GitHub release.
 
 ## Release Process
 
-### Standard Release (NIF/Package Updates)
+### Standard Vix Release
 
-For releases without libvips changes:
+1. Bump `@version` in `mix.exs`, commit, and push `master`.
 
-1. **Prepare Release**
    ```bash
-   # Bump version in mix.exs
    git add mix.exs
    git commit -m "Bump version to X.Y.Z"
    git push origin master
    ```
 
-2. **Create GitHub Release**
-   - Go to https://github.com/akash-akya/vix/releases
-   - Create new release with tag `vX.Y.Z`
-   - GitHub Actions automatically builds and uploads NIF artifacts
-   - Wait for all artifacts to be available (check all BEAM NIF versions: 2.16, 2.17, etc.)
+2. Create and push the release tag.
 
-3. **Generate Checksums**
    ```bash
-   # Clean local state
-   rm -rf cache/ priv/* checksum.exs _build/*/lib/vix
+   git tag -a vX.Y.Z -m "Release vX.Y.Z"
+   git push origin vX.Y.Z
+   ```
 
-   # Generate checksum file
-   ELIXIR_MAKE_CACHE_DIR="$(pwd)/cache" MIX_ENV=prod mix elixir_make.checksum --all
+3. Wait for `.github/workflows/precompile.yaml` to upload all NIF tarballs to
+   the GitHub release.
 
-   # Verify checksum contents
+4. Generate checksums.
+
+   ```bash
+   unset VIX_COMPILATION_MODE
+   rm -rf cache/ priv/* _build/*/lib/vix
+
+   ELIXIR_MAKE_CACHE_DIR="$(pwd)/cache" \
+   MIX_ENV=prod \
+   mix elixir_make.checksum --all
+
    cat checksum.exs
    ```
 
-4. **Test and Publish**
-   ```bash
-   # Test precompiled packages
-   ELIXIR_MAKE_CACHE_DIR="$(pwd)/cache" mix test
+   `checksum.exs` is generated, ignored by Git, and should not be committed.
+   The checksum task rewrites it, so deleting an old copy first is optional.
+   Keep it in the working tree for `mix hex.publish`.
 
-   # Publish to Hex
+5. Test the release artifacts, then publish.
+
+   ```bash
+   unset VIX_COMPILATION_MODE
+   rm -rf cache/ priv/* _build/*/lib/vix
+
+   ELIXIR_MAKE_CACHE_DIR="$(pwd)/cache" mix test
    mix hex.publish
    ```
 
-### Libvips Update Release
+   Before accepting the publish prompt, confirm the file list includes
+   `checksum.exs` and `DEVELOPMENT.md`.
 
-For releases with new precompiled libvips versions:
+6. Optional cleanup:
 
-1. **Update sharp-libvips Fork**
    ```bash
-   cd ../sharp-libvips  # Your fork directory
-   
-   # Pull latest stable upstream changes
-   git remote add upstream https://github.com/lovell/sharp-libvips.git
+   rm -rf cache/ priv/* checksum.exs _build/*/lib/vix doc/ vix-*.tar
+   ```
+
+   This is only housekeeping. `checksum.exs` can remain locally after publish.
+
+### Failed Tag Build
+
+If the tag workflow fails before Hex publish, fix `master`, push the fix, move
+the tag, and force-push the tag:
+
+```bash
+git push origin master
+git tag -fa vX.Y.Z -m "Release vX.Y.Z"
+git push --force origin vX.Y.Z
+```
+
+The release workflow uses `overwrite_files: true`, so rerunning the same tag can
+replace partial GitHub release artifacts. After a Hex package is public, do not
+move the tag; publish a new patch or release-candidate version instead.
+
+### Libvips Update
+
+Use this when Vix should consume a new sharp-libvips release.
+
+1. Rebase the sharp-libvips fork.
+
+   ```bash
+   cd ~/repos/clang/sharp-libvips-2
    git fetch upstream
-   git checkout upstream/main
-   
-   # Apply our patches for shared library compatibility
-   git cherry-pick <our-patch-commits>
-   
-   # Create tag matching upstream version
-   git tag v8.15.X
-   git push origin v8.15.X
+   git checkout main
+   git rebase upstream/main
    ```
 
-2. **Wait for Artifacts**
-   - GitHub Actions in sharp-libvips fork creates release and artifacts
-   - Verify all required platform artifacts are created
+   Preserve only the fork behavior Vix needs: direct GitHub release asset
+   upload, `.integrity` files, fork-local notices, and any deliberate freshness
+   gate change. Do not reintroduce old C-only packaging changes; Vix expects
+   precompiled POSIX packages to provide `libvips-cpp`.
 
-3. **Update Vix Configuration**
+2. Push and tag the sharp-libvips release candidate.
+
    ```bash
-   # Update build_scripts/precompiler.exs
-   # - @vips_version (line 11)
-   # - @release_tag (line 24)
+   git push --force-with-lease origin main
+   git tag -a v<libvips-version>-rc<N> -m "libvips <libvips-version> rc<N>"
+   git push origin v<libvips-version>-rc<N>
    ```
 
-4. **Test Locally**
+3. Verify the release assets.
+
    ```bash
-   # Clean and test with new libvips
-   rm -rf _build/*/lib/vix cache/ priv/* checksum.exs
-   export VIX_COMPILATION_MODE=PRECOMPILED_LIBVIPS
-   mix compile
+   curl -fsSL \
+     https://api.github.com/repos/akash-akya/sharp-libvips/releases/tags/v8.18.7-rc1 \
+     | jq -r '.assets[].name' \
+     | sort
+   ```
+
+   Vix needs the mapped tarballs above and their `.integrity` files.
+
+4. Update Vix.
+
+   - Change `@release_tag` in `build_scripts/precompiler.exs`.
+   - If the package layout changed, update `c_src/Makefile`,
+     `make_precompiler_priv_paths` in `mix.exs`, and the target mapping in
+     `build_scripts/precompiler.exs`.
+
+5. Test locally.
+
+   ```bash
+   rm -rf _build/*/lib/vix cache/ priv/*
+
+   ELIXIR_MAKE_CACHE_DIR="$(pwd)/cache" \
+   VIX_COMPILATION_MODE=PRECOMPILED_LIBVIPS \
    mix test
+
+   VIX_COMPILATION_MODE=PLATFORM_PROVIDED_LIBVIPS mix test
    ```
 
-5. **Release**
-   - Follow standard release process above
-   - Push libvips configuration changes
-   - Create Vix release and publish to Hex
+6. Follow the standard Vix release process.
 
 ## Troubleshooting
 
-### Common Build Issues
+### Precompiled libvips Download Fails
 
-**"libvips not found"**
+Check the configured tag and asset URL:
+
 ```bash
-# Install system libvips
-sudo apt-get install libvips-dev  # Ubuntu/Debian
-brew install vips                  # macOS
+grep '@release_tag' build_scripts/precompiler.exs
 
-# Or force precompiled mode
-export VIX_COMPILATION_MODE=PRECOMPILED_LIBVIPS
+curl -I \
+  https://github.com/akash-akya/sharp-libvips/releases/download/v8.18.7-rc1/sharp-libvips-linux-x64.tar.gz
 ```
 
-**"NIF compilation failed"**
+If Erlang reports a crypto or SSL error before downloading, fix the local
+Erlang/OpenSSL installation. For example, an OTP build linked to
+`libcrypto.so.1.1` will fail where that shared library is missing.
+
+### NIF Link Fails
+
 ```bash
-# Clean and rebuild
 make deep_clean
-make all
-
-# Inspect the active native build configuration
 make debug
+make V=1 all
+
+find priv/precompiled_libvips/lib -maxdepth 1 -name 'libvips-cpp*' -print
+pkg-config --modversion vips
+pkg-config --cflags --libs vips
 ```
 
-**"Checksum verification failed"**
+### Checksum Verification Fails
+
+Regenerate checksums against the intended GitHub release artifacts:
+
 ```bash
-# Clear cache and regenerate
-rm -rf cache/ checksum.exs
-ELIXIR_MAKE_CACHE_DIR="$(pwd)/cache" MIX_ENV=prod mix elixir_make.checksum --all
+rm -rf cache/ priv/* _build/*/lib/vix
+
+ELIXIR_MAKE_CACHE_DIR="$(pwd)/cache" \
+MIX_ENV=prod \
+mix elixir_make.checksum --all
 ```
-
-### Toolchain Issues
-
-**"Toolchain download failed"**
-```bash
-# Check if mirror is working
-curl -I https://github.com/akash-akya/vix/releases/download/toolchains-v11.2.1/x86_64-linux-musl-cross.tgz
-
-# Manually download and extract
-wget https://more.musl.cc/11.2.1/x86_64-linux-musl/x86_64-linux-musl-cross.tgz
-tar -xzf x86_64-linux-musl-cross.tgz
-```
-
-### Development Tips
-
-- Use `ELIXIR_MAKE_CACHE_DIR="$(pwd)/cache"` to cache precompiled binaries locally
-- Set `VIX_COMPILATION_MODE=PLATFORM_PROVIDED_LIBVIPS` for faster iteration during development
-- Use `VIX_LIBVIPS_PREFIX` when testing a specific local libvips build
-- Run `make debug` to inspect the effective native build configuration
-- Use `mix test --trace` for verbose test output
-- Check GitHub Actions logs for CI build failures

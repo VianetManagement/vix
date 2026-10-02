@@ -44,7 +44,7 @@ BASE_CFLAGS = -O2 -Wall -Werror -Wextra -Wno-unused-parameter -Wmissing-prototyp
 # Platform-specific flags
 ifeq ($(UNAME_SYS), Darwin)
 	CFLAGS += $(BASE_CFLAGS)
-	LDFLAGS += -flat_namespace -undefined suppress
+	LDFLAGS += -undefined dynamic_lookup
 else ifeq ($(UNAME_SYS), Linux)
 	CFLAGS += $(BASE_CFLAGS)
 endif
@@ -88,10 +88,10 @@ else
 
 	ifeq ($(UNAME_SYS), Darwin)
 		LDFLAGS += -Wl,-rpath,@loader_path/precompiled_libvips/lib
-		LDLIBS  += -lvips-cpp.42
+		LDLIBS  += $(PRECOMPILED_LIBVIPS_PATH)/lib/libvips-cpp.*.dylib
 	else ifeq ($(UNAME_SYS), Linux)
 		LDFLAGS += -Wl,-s -Wl,--disable-new-dtags -Wl,-rpath='$$ORIGIN/precompiled_libvips/lib'
-		LDLIBS  += -l:libvips-cpp.so.42
+		LDLIBS  += $(PRECOMPILED_LIBVIPS_PATH)/lib/libvips-cpp.so.*
 	endif
 endif
 
@@ -224,8 +224,12 @@ $(OBJ): Makefile $(COMPILE_CONFIG) $(PRECOMPILED_LIBVIPS_PREREQUISITE)
 %.d: %.c
 	$(Q)$(CC) $(CFLAGS) -MM -MT $(@:.d=.o) $< > $@
 
-# Include dependency files if they exist
+# Include dependency files only for build goals. Regenerating them needs the
+# Erlang include paths, which are not available for direct clean/help targets.
+NO_DEP_GOALS := clean clean_precompiled_libvips help debug
+ifneq ($(filter-out $(NO_DEP_GOALS),$(or $(MAKECMDGOALS),all)),)
 -include $(DEP)
+endif
 
 # Object file compilation with dependency tracking
 %.o: %.c

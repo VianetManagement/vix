@@ -264,7 +264,16 @@ defmodule Vix.Vips.Operation.Helper do
 
   def operation_call(name, args, opts, %{desc: _} = spec) do
     nif_args = cast_arguments_to_nif_terms(args, opts, spec.in_req_spec, spec.in_opt_spec)
+    nif_operation_call(name, nif_args, spec)
+  end
 
+  def mutable_operation_call(name, image, arg_terms, %{in_req_spec: [image_spec | _]} = spec) do
+    image_term = Type.to_nif_term(image_spec.type, image, image_spec.data)
+    nif_args = [{image_spec.param_name, image_term} | arg_terms]
+    nif_operation_call(name, nif_args, spec)
+  end
+
+  defp nif_operation_call(name, nif_args, spec) do
     case Vix.Nif.nif_vips_operation_call(name, nif_args) do
       {:ok, nif_out_args} ->
         output_to_erl_terms(

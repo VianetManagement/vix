@@ -3,6 +3,7 @@ defmodule Vix.Vips.MutableImageTest do
 
   alias Vix.Vips.Image
   alias Vix.Vips.MutableImage
+  alias Vix.Vips.MutableOperation
 
   import Vix.Support.Images
 
@@ -67,5 +68,51 @@ defmodule Vix.Vips.MutableImageTest do
     {:ok, i} = Vix.Vips.Image.new_from_file(img_path("puppies.jpg"))
 
     assert {:ok, _} = Vix.Vips.Image.mutate(i, & &1)
+  end
+
+  test "mutate returns error from callback" do
+    {:ok, i} = Image.new_from_file(img_path("puppies.jpg"))
+
+    assert {:error, :boom} == Image.mutate(i, fn _ -> {:error, :boom} end)
+  end
+
+  test "mutable operations run with required and optional arguments" do
+    {:ok, image} = Image.build_image(3, 3, [0])
+
+    assert {:ok, mutated_image} =
+             Image.mutate(image, fn mutable_image ->
+               MutableOperation.draw_rect(
+                 mutable_image,
+                 [255],
+                 0,
+                 0,
+                 1,
+                 1,
+                 fill: true
+               )
+             end)
+
+    assert {:ok, [255]} = Image.get_pixel(mutated_image, 0, 0)
+    assert {:ok, [0]} = Image.get_pixel(mutated_image, 1, 1)
+  end
+
+  test "mutable operations raise on invalid arguments without stopping the image process" do
+    {:ok, image} = Image.new_from_file(img_path("puppies.jpg"))
+    {:ok, mutable_image} = MutableImage.new(image)
+
+    assert_raise ArgumentError, "value must be >= 0", fn ->
+      MutableOperation.draw_flood(mutable_image, [255], -1, 0)
+    end
+
+    assert Process.alive?(mutable_image.pid)
+    MutableImage.stop(mutable_image)
+  end
+
+  test "mutate raises on unsupported callback return" do
+    {:ok, i} = Image.new_from_file(img_path("puppies.jpg"))
+
+    assert_raise ArgumentError, ~r/mutate callback must return.*got: nil/, fn ->
+      Image.mutate(i, fn _ -> nil end)
+    end
   end
 end

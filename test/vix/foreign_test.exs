@@ -22,10 +22,11 @@ defmodule Vix.Vips.ForeignTest do
   end
 
   test "find_load_source" do
-    bin = File.read!(img_path("puppies.jpg"))
+    # Sniffing needs only the header; writing more can exceed pipe capacity and block with no reader
+    header = binary_part(File.read!(img_path("puppies.jpg")), 0, 1024)
 
     assert {pipe, source} = Vix.SourcePipe.new()
-    assert :ok = Vix.SourcePipe.write(pipe, bin)
+    assert :ok = Vix.SourcePipe.write(pipe, header)
     assert :ok = Vix.SourcePipe.stop(pipe)
 
     assert {:ok, "VipsForeignLoadJpegSource"} = Foreign.find_load_source(source)
