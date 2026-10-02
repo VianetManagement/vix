@@ -17,7 +17,7 @@ defmodule Vix.LibvipsPrecompiled do
     :ok
   end
 
-  @release_tag "v8.18.2-heic"
+  @release_tag "v8.18.7-heic"
 
   @filename "sharp-libvips-<%= suffix %>.tar.gz"
   @url "https://github.com/VianetManagement/sharp-libvips/releases/download/<%= tag %>/<%= filename %>"
