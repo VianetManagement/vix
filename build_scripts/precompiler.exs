@@ -81,7 +81,9 @@ defmodule Vix.LibvipsPrecompiled do
         :get,
         {String.to_charlist(url), []},
         https_opts(hostname),
-        stream: String.to_charlist(path)
+        # OTP 29's 10KB default rejects GitHub's release redirects (~9KB CSP header)
+        stream: String.to_charlist(path),
+        max_header_size: 65_536
       )
 
     {:ok, path}
